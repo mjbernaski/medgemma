@@ -199,7 +199,15 @@ dark_theme = gr.themes.Base(
 )
 
 # Inject <script> in <head> so dark class is set before Svelte renders
-DARK_HEAD = "<script>document.documentElement.classList.add('dark');</script>"
+DARK_HEAD = """<script>
+document.documentElement.classList.add('dark');
+document.addEventListener('keydown', function(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        var btn = document.querySelector('button.primary');
+        if (btn) btn.click();
+    }
+});
+</script>"""
 
 # Build the Gradio UI
 with gr.Blocks(
