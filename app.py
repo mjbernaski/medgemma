@@ -1,7 +1,9 @@
 """MedGemma 27B Gradio Web UI - Medical AI Chat with Image Support."""
 
 import base64
+import json
 import os
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -19,6 +21,25 @@ GRADIO_PORT = int(os.getenv("GRADIO_PORT", "7860"))
 GRADIO_HOST = os.getenv("GRADIO_HOST", "0.0.0.0")
 
 client = OpenAI(base_url=f"http://{VLLM_HOST}:{VLLM_PORT}/v1", api_key="unused")
+
+LOG_FILE = Path(__file__).parent / "logs" / "chat_log.jsonl"
+LOG_FILE.parent.mkdir(exist_ok=True)
+
+
+def log_call(user_text, image_attached, system_prompt_name, response_length, response_text, error=None):
+    """Append a log entry for each model call."""
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": MODEL_NAME,
+        "system_prompt": system_prompt_name,
+        "user_text": user_text,
+        "image_attached": image_attached,
+        "response_length_setting": response_length,
+        "response_text": response_text,
+        "error": error,
+    }
+    with open(LOG_FILE, "a") as f:
+        f.write(json.dumps(entry) + "\n")
 
 SYSTEM_PROMPTS = {
     "General Medical Assistant": (
@@ -132,6 +153,11 @@ def chat(user_text, image, history, system_prompt_name, response_length):
     except Exception as e:
         error_msg = f"**Error:** {e}\n\nMake sure the vLLM server is running on {VLLM_HOST}:{VLLM_PORT}."
         history[-1]["content"] = error_msg
+        log_call(user_text, image is not None, system_prompt_name, response_length,
+                 response_text="", error=str(e))
+    else:
+        log_call(user_text, image is not None, system_prompt_name, response_length,
+                 response_text=history[-1]["content"])
 
     # Final yield to ensure history is committed after stream ends
     yield history
