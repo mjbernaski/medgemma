@@ -99,7 +99,7 @@ RESPONSE_LENGTHS = {
 def chat(user_text, image, history, system_prompt_name, response_length):
     """Send a message (with optional image) and stream the response."""
     if not user_text.strip() and image is None:
-        yield history, gr.update()
+        yield history
         return
 
     # Add user message to history display
@@ -128,13 +128,13 @@ def chat(user_text, image, history, system_prompt_name, response_length):
             delta = chunk.choices[0].delta
             if delta.content:
                 history[-1]["content"] += delta.content
-                yield history, gr.update(value=None)
+                yield history
     except Exception as e:
         error_msg = f"**Error:** {e}\n\nMake sure the vLLM server is running on {VLLM_HOST}:{VLLM_PORT}."
         history[-1]["content"] = error_msg
 
     # Final yield to ensure history is committed after stream ends
-    yield history, gr.update(value=None)
+    yield history
 
 
 # Force-dark theme: set both light and dark variants to dark colors
@@ -253,13 +253,13 @@ with gr.Blocks(
     send_btn.click(
         fn=chat,
         inputs=[text_input, image_input, chatbot, system_prompt, response_length],
-        outputs=[chatbot, image_input],
+        outputs=[chatbot],
     ).then(fn=lambda: "", outputs=text_input)
 
     text_input.submit(
         fn=chat,
         inputs=[text_input, image_input, chatbot, system_prompt, response_length],
-        outputs=[chatbot, image_input],
+        outputs=[chatbot],
     ).then(fn=lambda: "", outputs=text_input)
 
     clear_btn.click(fn=lambda: ([], None), outputs=[chatbot, image_input])
