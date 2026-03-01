@@ -88,7 +88,15 @@ def build_messages(history, user_text, image, system_prompt_name):
     return messages
 
 
-def chat(user_text, image, history, system_prompt_name):
+RESPONSE_LENGTHS = {
+    "Short (~256 tokens)": 256,
+    "Medium (~1024 tokens)": 1024,
+    "Long (~2048 tokens)": 2048,
+    "Extra Long (~4096 tokens)": 4096,
+}
+
+
+def chat(user_text, image, history, system_prompt_name, response_length):
     """Send a message (with optional image) and stream the response."""
     if not user_text.strip() and image is None:
         yield history, gr.update()
@@ -113,7 +121,7 @@ def chat(user_text, image, history, system_prompt_name):
             model=MODEL_NAME,
             messages=messages,
             stream=True,
-            max_tokens=2048,
+            max_tokens=RESPONSE_LENGTHS.get(response_length, 2048),
             temperature=0.3,
         )
         for chunk in stream:
@@ -124,13 +132,78 @@ def chat(user_text, image, history, system_prompt_name):
     except Exception as e:
         error_msg = f"**Error:** {e}\n\nMake sure the vLLM server is running on {VLLM_HOST}:{VLLM_PORT}."
         history[-1]["content"] = error_msg
-        yield history, gr.update(value=None)
 
+    # Final yield to ensure history is committed after stream ends
+    yield history, gr.update(value=None)
+
+
+# Force-dark theme: set both light and dark variants to dark colors
+# so the UI is dark regardless of browser/OS theme preference.
+dark_theme = gr.themes.Base(
+    primary_hue="blue",
+    neutral_hue="slate",
+    font=gr.themes.GoogleFont("Inter"),
+).set(
+    # Body / page background
+    body_background_fill="*neutral_950",
+    body_background_fill_dark="*neutral_950",
+    body_text_color="*neutral_50",
+    body_text_color_dark="*neutral_50",
+    body_text_color_subdued="*neutral_300",
+    body_text_color_subdued_dark="*neutral_300",
+    # Primary fill areas
+    background_fill_primary="*neutral_950",
+    background_fill_primary_dark="*neutral_950",
+    background_fill_secondary="*neutral_800",
+    background_fill_secondary_dark="*neutral_800",
+    # Chat bubble colors
+    color_accent_soft="*neutral_700",
+    color_accent_soft_dark="*neutral_700",
+    # Blocks / panels
+    block_background_fill="*neutral_900",
+    block_background_fill_dark="*neutral_900",
+    block_label_background_fill="*neutral_800",
+    block_label_background_fill_dark="*neutral_800",
+    block_label_text_color="*neutral_200",
+    block_label_text_color_dark="*neutral_200",
+    block_title_text_color="*neutral_100",
+    block_title_text_color_dark="*neutral_100",
+    block_border_color="*neutral_700",
+    block_border_color_dark="*neutral_700",
+    # Input fields
+    input_background_fill="*neutral_800",
+    input_background_fill_dark="*neutral_800",
+    input_border_color="*neutral_600",
+    input_border_color_dark="*neutral_600",
+    input_placeholder_color="*neutral_400",
+    input_placeholder_color_dark="*neutral_400",
+    # Panels
+    panel_background_fill="*neutral_900",
+    panel_background_fill_dark="*neutral_900",
+    panel_border_color="*neutral_700",
+    panel_border_color_dark="*neutral_700",
+    # Buttons
+    button_primary_background_fill="*primary_600",
+    button_primary_background_fill_dark="*primary_600",
+    button_primary_text_color="white",
+    button_primary_text_color_dark="white",
+    button_secondary_background_fill="*neutral_700",
+    button_secondary_background_fill_dark="*neutral_700",
+    button_secondary_text_color="*neutral_100",
+    button_secondary_text_color_dark="*neutral_100",
+    # Borders
+    border_color_primary="*neutral_600",
+    border_color_primary_dark="*neutral_600",
+    shadow_drop="none",
+    shadow_drop_lg="none",
+)
+
+# Inject <script> in <head> so dark class is set before Svelte renders
+DARK_HEAD = "<script>document.documentElement.classList.add('dark');</script>"
 
 # Build the Gradio UI
 with gr.Blocks(
     title="MedGemma 27B - Medical AI Assistant",
-    theme=gr.themes.Soft(),
 ) as demo:
     gr.Markdown(
         "# MedGemma 27B Medical AI Assistant\n"
@@ -147,6 +220,11 @@ with gr.Blocks(
                 value="General Medical Assistant",
                 label="Assistant Mode",
             )
+            response_length = gr.Dropdown(
+                choices=list(RESPONSE_LENGTHS.keys()),
+                value="Long (~2048 tokens)",
+                label="Response Length",
+            )
             image_input = gr.Image(label="Upload Medical Image (optional)", type="pil")
             gr.Markdown(
                 "### Example Queries\n"
@@ -160,32 +238,40 @@ with gr.Blocks(
             chatbot = gr.Chatbot(
                 label="Conversation",
                 height=550,
-                type="messages",
+            )
+            text_input = gr.Textbox(
+                placeholder="Ask a medical question or describe the uploaded image...",
+                label="Message",
+                lines=4,
+                max_lines=10,
             )
             with gr.Row():
-                text_input = gr.Textbox(
-                    placeholder="Ask a medical question or describe the uploaded image...",
-                    label="Message",
-                    scale=4,
-                    lines=1,
-                )
                 send_btn = gr.Button("Send", variant="primary", scale=1)
-            clear_btn = gr.Button("Clear Conversation")
+                clear_btn = gr.Button("Clear Conversation", scale=1)
 
     # Wire up events
     send_btn.click(
         fn=chat,
-        inputs=[text_input, image_input, chatbot, system_prompt],
+        inputs=[text_input, image_input, chatbot, system_prompt, response_length],
         outputs=[chatbot, image_input],
     ).then(fn=lambda: "", outputs=text_input)
 
     text_input.submit(
         fn=chat,
-        inputs=[text_input, image_input, chatbot, system_prompt],
+        inputs=[text_input, image_input, chatbot, system_prompt, response_length],
         outputs=[chatbot, image_input],
     ).then(fn=lambda: "", outputs=text_input)
 
     clear_btn.click(fn=lambda: ([], None), outputs=[chatbot, image_input])
 
 if __name__ == "__main__":
-    demo.launch(server_name=GRADIO_HOST, server_port=GRADIO_PORT)
+    demo.launch(
+        server_name=GRADIO_HOST,
+        server_port=GRADIO_PORT,
+        theme=dark_theme,
+        head=DARK_HEAD,
+        css="""
+        .gradio-container { max-width: 1400px !important; }
+        footer { display: none !important; }
+        """,
+    )
