@@ -19,8 +19,14 @@ VLLM_PORT = os.getenv("VLLM_PORT", "8000")
 MODEL_NAME = os.getenv("MODEL_NAME", "google/medgemma-27b-it")
 GRADIO_PORT = int(os.getenv("GRADIO_PORT", "7860"))
 GRADIO_HOST = os.getenv("GRADIO_HOST", "0.0.0.0")
+APP_TOKEN = os.getenv("APP_TOKEN", "1200gulf10129Trails")
 
 client = OpenAI(base_url=f"http://{VLLM_HOST}:{VLLM_PORT}/v1", api_key="unused")
+
+
+def check_token(username, password):
+    """Authenticate by verifying the access token (entered as the password)."""
+    return password == APP_TOKEN
 
 LOG_FILE = Path(__file__).parent / "logs" / "chat_log.jsonl"
 LOG_FILE.parent.mkdir(exist_ok=True)
@@ -302,6 +308,8 @@ if __name__ == "__main__":
     demo.launch(
         server_name=GRADIO_HOST,
         server_port=GRADIO_PORT,
+        auth=check_token,
+        auth_message="Enter any username and the access token as the password.",
         theme=dark_theme,
         head=DARK_HEAD,
         css="""
